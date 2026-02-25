@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UT Learning Hub | Repositorio</title>
+    <title>UT Learning Hub | Repositorio Pro</title>
     
     <!-- 1. Librerías Necesarias -->
-    <!-- React y Babel -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Estilos y Iconos -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- 2. Firebase SDK (Versión Compat para evitar errores de importación en el navegador) -->
+    <!-- 2. Firebase SDK Compat -->
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
@@ -22,7 +20,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
-        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); }
+        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); }
         .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -32,7 +30,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- CONFIGURACIÓN DE FIREBASE (USANDO GLOBAL firebase) ---
         const firebaseConfig = {
             apiKey: "AIzaSyAYCGq77OtkeeRwTYGW1Q9U6Aap1_zdFBg",
             authDomain: "ut-learning-hub.firebaseapp.com",
@@ -43,7 +40,6 @@
             measurementId: "G-02W9GVHT0C"
         };
 
-        // Inicialización
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
@@ -60,13 +56,11 @@
             const [filter, setFilter] = React.useState("Todas");
             const [search, setSearch] = React.useState("");
             const [isOpen, setIsOpen] = React.useState(false);
-            const [form, setForm] = React.useState({ title: '', career: '', url: '' });
+            const [form, setForm] = React.useState({ title: '', career: '', url: '', description: '' });
             const [loading, setLoading] = React.useState(true);
 
             React.useEffect(() => {
-                // Iniciar sesión anónima automáticamente
                 auth.signInAnonymously().catch(console.error);
-                
                 const unsubscribeAuth = auth.onAuthStateChanged(async (curr) => {
                     setUser(curr);
                     if (curr) {
@@ -95,7 +89,6 @@
                     .onSnapshot((s) => {
                         setMaterials(s.docs.map(d => ({ id: d.id, ...d.data() })));
                         setLoading(false);
-                        // Refrescar iconos después de cargar datos
                         setTimeout(() => lucide.createIcons(), 100);
                     }, (err) => {
                         console.error("Error cargando materiales:", err);
@@ -116,9 +109,19 @@
                         createdAt: serverTimestamp()
                     });
                     setIsOpen(false);
-                    setForm({ title: '', career: '', url: '' });
+                    setForm({ title: '', career: '', url: '', description: '' });
                 } catch (err) {
                     console.error("Error al subir:", err);
+                }
+            };
+
+            const handleDelete = async (id) => {
+                if(window.confirm("¿Estás seguro de que quieres eliminar este archivo?")) {
+                    try {
+                        await db.collection(`artifacts/${appId}/public/data/materials`).doc(id).delete();
+                    } catch (err) {
+                        console.error("Error al borrar:", err);
+                    }
                 }
             };
 
@@ -131,40 +134,46 @@
                 }
             };
 
+            // FUNCIÓN DE PERMISOS
+            const canModify = (m) => {
+                if (!profile) return false;
+                if (profile.role === ROLES.ADMIN || profile.role === ROLES.VERIFIER) return true;
+                return m.uploaderId === user.uid;
+            };
+
             const filtered = materials
                 .filter(m => (filter === "Todas" || m.career === filter))
-                .filter(m => m.title.toLowerCase().includes(search.toLowerCase()))
+                .filter(m => m.title.toLowerCase().includes(search.toLowerCase()) || (m.description && m.description.toLowerCase().includes(search.toLowerCase())))
                 .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
             return (
-                <div className="min-h-screen">
-                    <nav className="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-slate-200">
+                <div className="min-h-screen pb-24">
+                    <nav className="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-slate-200 shadow-sm">
                         <div className="flex items-center gap-2 font-black text-indigo-600 text-xl tracking-tighter">
                             <i data-lucide="book-open" className="w-6 h-6"></i> UT HUB
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="hidden sm:flex flex-col items-end">
-                                <span className="text-[10px] font-black text-slate-400 uppercase leading-none">Miembro</span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase leading-none">Usuario</span>
                                 <span className="text-xs font-bold text-slate-700">{profile?.name}</span>
                             </div>
-                            <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase border ${
+                            <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase border ${
                                 profile?.role === ROLES.ADMIN ? 'bg-rose-50 border-rose-200 text-rose-600' : 
                                 profile?.role === ROLES.VERIFIER ? 'bg-amber-50 border-amber-200 text-amber-600' : 
                                 'bg-indigo-50 border-indigo-200 text-indigo-600'
                             }`}>
                                 {profile?.role}
                             </span>
-                            <button onClick={() => setIsOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:bg-indigo-700 active:scale-95">
-                                <span className="hidden sm:inline">+ Subir Material</span>
-                                <span className="sm:hidden">+</span>
+                            <button onClick={() => setIsOpen(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all hover:bg-indigo-700 active:scale-95">
+                                <span className="flex items-center gap-2"><i data-lucide="plus" className="w-4 h-4"></i> Subir</span>
                             </button>
                         </div>
                     </nav>
 
                     <main className="max-w-6xl mx-auto p-6">
-                        <div className="mb-12 animate-fade-in">
+                        <div className="mb-10 animate-fade-in">
                             <h1 className="text-4xl font-black text-slate-800 mb-2 tracking-tight">Repositorio UT</h1>
-                            <p className="text-slate-500 font-medium">Material colaborativo para estudiantes de todas las carreras.</p>
+                            <p className="text-slate-500 font-medium">Encuentra y comparte guías, apuntes y proyectos académicos.</p>
                         </div>
 
                         <div className="flex flex-col md:flex-row gap-4 mb-10">
@@ -172,7 +181,7 @@
                                 <i data-lucide="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5"></i>
                                 <input 
                                     className="w-full pl-12 pr-4 py-4 rounded-2xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm bg-white transition-all" 
-                                    placeholder="¿Qué material necesitas hoy?" 
+                                    placeholder="Buscar por título o descripción..." 
                                     value={search} 
                                     onChange={e => setSearch(e.target.value)} 
                                 />
@@ -192,29 +201,42 @@
                         {loading ? (
                             <div className="text-center py-20">
                                 <div className="animate-spin w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                                <p className="font-bold text-slate-400">Sincronizando con la nube...</p>
-                            </div>
-                        ) : filtered.length === 0 ? (
-                            <div className="text-center py-20 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200">
-                                <i data-lucide="inbox" className="mx-auto text-slate-200 w-16 h-16 mb-4"></i>
-                                <p className="text-slate-500 font-bold">No se encontró material didáctico.</p>
-                                <button onClick={() => setIsOpen(true)} className="mt-4 text-indigo-600 font-bold hover:underline">¡Sube el primero!</button>
+                                <p className="font-bold text-slate-400">Conectando con la base de datos...</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {filtered.map(m => (
-                                    <div key={m.id} className="bg-white p-7 rounded-[2.5rem] border border-slate-100 card-hover transition-all animate-fade-in">
+                                    <div key={m.id} className="bg-white p-7 rounded-[2.5rem] border border-slate-100 card-hover transition-all animate-fade-in relative group">
+                                        
+                                        {/* BOTÓN DE ELIMINAR (SOLO SI TIENE PERMISO) */}
+                                        {canModify(m) && (
+                                            <button 
+                                                onClick={() => handleDelete(m.id)}
+                                                className="absolute top-6 right-6 p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                                                title="Eliminar archivo"
+                                            >
+                                                <i data-lucide="trash-2" className="w-5 h-5"></i>
+                                            </button>
+                                        )}
+
                                         <div className="flex justify-between items-start mb-6">
                                             <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center">
                                                 <i data-lucide="file-text" className="w-6 h-6"></i>
                                             </div>
                                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-full">{m.career}</span>
                                         </div>
-                                        <h3 className="text-xl font-bold text-slate-800 mb-6 leading-tight h-14 line-clamp-2">{m.title}</h3>
+                                        
+                                        <h3 className="text-xl font-bold text-slate-800 mb-2 leading-tight line-clamp-2">{m.title}</h3>
+                                        
+                                        {/* DESCRIPCIÓN */}
+                                        <p className="text-slate-500 text-sm mb-6 line-clamp-3 min-h-[3rem]">
+                                            {m.description || "Sin descripción proporcionada."}
+                                        </p>
+
                                         <div className="flex justify-between items-center pt-5 border-t border-slate-50">
                                             <div className="flex flex-col">
-                                                <span className="text-[9px] font-black text-slate-300 uppercase">Autor</span>
-                                                <span className="text-xs font-bold text-slate-400">{m.uploaderName}</span>
+                                                <span className="text-[9px] font-black text-slate-300 uppercase">Subido por</span>
+                                                <span className="text-xs font-bold text-slate-400 truncate max-w-[120px]">{m.uploaderName}</span>
                                             </div>
                                             <a href={m.url} target="_blank" className="bg-slate-900 text-white p-3.5 rounded-2xl hover:bg-indigo-600 transition-all shadow-lg active:scale-95">
                                                 <i data-lucide="download" className="w-5 h-5"></i>
@@ -226,15 +248,15 @@
                         )}
                     </main>
 
-                    {/* Simulador de Roles para la Presentación */}
-                    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 glass px-6 py-3 rounded-full flex items-center gap-4 text-[10px] z-50 shadow-2xl border border-white/50">
-                        <span className="text-slate-400 font-black uppercase tracking-tighter">Prueba de Roles:</span>
+                    {/* Simulador de Roles */}
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white px-6 py-3 rounded-full flex items-center gap-4 text-[10px] z-50 shadow-2xl backdrop-blur-md border border-slate-700">
+                        <span className="text-slate-500 font-black uppercase tracking-widest">Simular Rol:</span>
                         <div className="flex gap-1">
                             {Object.values(ROLES).map(r => (
                                 <button 
                                     key={r} 
                                     onClick={() => changeRole(r)} 
-                                    className={`px-3 py-1 rounded-full uppercase font-black transition-all ${profile?.role === r ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white/50 text-slate-400 hover:text-slate-600'}`}
+                                    className={`px-3 py-1 rounded-full uppercase font-black transition-all ${profile?.role === r ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/50' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
                                 >
                                     {r}
                                 </button>
@@ -244,10 +266,10 @@
 
                     {/* Modal de Carga */}
                     {isOpen && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-                            <div className="bg-white p-10 rounded-[3rem] w-full max-w-md shadow-2xl animate-fade-in">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h2 className="text-2xl font-black text-slate-800">Compartir Material</h2>
+                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+                            <div className="bg-white p-10 rounded-[3rem] w-full max-w-lg shadow-2xl animate-fade-in">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-2xl font-black text-slate-800">Publicar Material</h2>
                                     <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                                         <i data-lucide="x" className="w-6 h-6"></i>
                                     </button>
@@ -255,18 +277,28 @@
                                 <form onSubmit={handleUpload} className="space-y-5">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Título del Documento</label>
-                                        <input required className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Ej: Apuntes de Física II" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+                                        <input required className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="Ej: Guía de Cálculo Diferencial" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Carrera Correspondiente</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Carrera</label>
                                         <select required className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer" value={form.career} onChange={e => setForm({...form, career: e.target.value})}>
                                             <option value="">Selecciona Carrera...</option>
                                             {CAREERS.filter(c => c !== "Todas").map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Enlace (Drive, Cloud, etc.)</label>
-                                        <input required type="url" className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..." value={form.url} onChange={e => setForm({...form, url: e.target.value})} />
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Enlace de descarga (Drive, etc.)</label>
+                                        <input required type="url" className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="https://drive.google.com/..." value={form.url} onChange={e => setForm({...form, url: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descripción (Opcional)</label>
+                                        <textarea 
+                                            rows="3" 
+                                            className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none" 
+                                            placeholder="¿De qué trata este material? Temas, unidad, parcial..." 
+                                            value={form.description} 
+                                            onChange={e => setForm({...form, description: e.target.value})}
+                                        ></textarea>
                                     </div>
                                     <button className="w-full py-5 bg-indigo-600 text-white font-black rounded-[1.5rem] shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95">Publicar Ahora</button>
                                     <button type="button" onClick={() => setIsOpen(false)} className="w-full text-slate-400 font-bold text-sm">Cancelar</button>
@@ -281,7 +313,7 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
 
-        // Refresh icons periodically
+        // Refresh icons periodically to ensure dynamic content has icons
         setInterval(() => {
             if (window.lucide) lucide.createIcons();
         }, 1000);
