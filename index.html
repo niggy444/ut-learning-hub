@@ -56,6 +56,7 @@
             const [filter, setFilter] = React.useState("Todas");
             const [search, setSearch] = React.useState("");
             const [isOpen, setIsOpen] = React.useState(false);
+            const [editingItem, setEditingItem] = React.useState(null);
             const [form, setForm] = React.useState({ title: '', career: '', url: '', description: '' });
             const [loading, setLoading] = React.useState(true);
 
@@ -102,16 +103,27 @@
                 if (!form.title || !form.career || !form.url) return;
                 
                 try {
-                    await db.collection(`artifacts/${appId}/public/data/materials`).add({
-                        ...form,
-                        uploaderId: user.uid,
-                        uploaderName: profile.name,
-                        createdAt: serverTimestamp()
-                    });
-                    setIsOpen(false);
-                    setForm({ title: '', career: '', url: '', description: '' });
+                    const materialsRef = db.collection(`artifacts/${appId}/public/data/materials`);
+                    
+                    if (editingItem) {
+                        // ACTUALIZAR EXISTENTE
+                        await materialsRef.doc(editingItem.id).update({
+                            ...form,
+                            updatedAt: serverTimestamp()
+                        });
+                    } else {
+                        // CREAR NUEVO
+                        await materialsRef.add({
+                            ...form,
+                            uploaderId: user.uid,
+                            uploaderName: profile.name,
+                            createdAt: serverTimestamp()
+                        });
+                    }
+                    
+                    closeModal();
                 } catch (err) {
-                    console.error("Error al subir:", err);
+                    console.error("Error al procesar material:", err);
                 }
             };
 
@@ -125,6 +137,23 @@
                 }
             };
 
+            const openEdit = (m) => {
+                setEditingItem(m);
+                setForm({
+                    title: m.title,
+                    career: m.career,
+                    url: m.url,
+                    description: m.description || ''
+                });
+                setIsOpen(true);
+            };
+
+            const closeModal = () => {
+                setIsOpen(false);
+                setEditingItem(null);
+                setForm({ title: '', career: '', url: '', description: '' });
+            };
+
             const changeRole = async (r) => {
                 try {
                     await db.doc(`artifacts/${appId}/public/data/profiles/${user.uid}`).update({ role: r });
@@ -134,11 +163,16 @@
                 }
             };
 
-            // FUNCIÓN DE PERMISOS
-            const canModify = (m) => {
+            // PERMISOS PARA ELIMINAR (Dueño, Verificador o Admin)
+            const canDelete = (m) => {
                 if (!profile) return false;
-                if (profile.role === ROLES.ADMIN || profile.role === ROLES.VERIFIER) return true;
-                return m.uploaderId === user.uid;
+                return profile.role === ROLES.ADMIN || profile.role === ROLES.VERIFIER || m.uploaderId === user.uid;
+            };
+
+            // PERMISOS PARA EDITAR (Solo Dueño o Admin)
+            const canEdit = (m) => {
+                if (!profile) return false;
+                return profile.role === ROLES.ADMIN || m.uploaderId === user.uid;
             };
 
             const filtered = materials
@@ -173,7 +207,7 @@
                     <main className="max-w-6xl mx-auto p-6">
                         <div className="mb-10 animate-fade-in">
                             <h1 className="text-4xl font-black text-slate-800 mb-2 tracking-tight">Repositorio UT</h1>
-                            <p className="text-slate-500 font-medium">Encuentra y comparte guías, apuntes y proyectos académicos.</p>
+                            <p className="text-slate-500 font-medium">Gestión de recursos académicos para la comunidad universitaria.</p>
                         </div>
 
                         <div className="flex flex-col md:flex-row gap-4 mb-10">
@@ -201,23 +235,35 @@
                         {loading ? (
                             <div className="text-center py-20">
                                 <div className="animate-spin w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                                <p className="font-bold text-slate-400">Conectando con la base de datos...</p>
+                                <p className="font-bold text-slate-400">Sincronizando contenidos...</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {filtered.map(m => (
                                     <div key={m.id} className="bg-white p-7 rounded-[2.5rem] border border-slate-100 card-hover transition-all animate-fade-in relative group">
                                         
-                                        {/* BOTÓN DE ELIMINAR (SOLO SI TIENE PERMISO) */}
-                                        {canModify(m) && (
-                                            <button 
-                                                onClick={() => handleDelete(m.id)}
-                                                className="absolute top-6 right-6 p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
-                                                title="Eliminar archivo"
-                                            >
-                                                <i data-lucide="trash-2" className="w-5 h-5"></i>
-                                            </button>
-                                        )}
+                                        <div className="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            {/* BOTÓN EDITAR */}
+                                            {canEdit(m) && (
+                                                <button 
+                                                    onClick={() => openEdit(m)}
+                                                    className="p-2 text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-full transition-all"
+                                                    title="Editar material"
+                                                >
+                                                    <i data-lucide="edit" className="w-5 h-5"></i>
+                                                </button>
+                                            )}
+                                            {/* BOTÓN ELIMINAR */}
+                                            {canDelete(m) && (
+                                                <button 
+                                                    onClick={() => handleDelete(m.id)}
+                                                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all"
+                                                    title="Eliminar archivo"
+                                                >
+                                                    <i data-lucide="trash-2" className="w-5 h-5"></i>
+                                                </button>
+                                            )}
+                                        </div>
 
                                         <div className="flex justify-between items-start mb-6">
                                             <div className="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-2xl flex items-center justify-center">
@@ -227,15 +273,13 @@
                                         </div>
                                         
                                         <h3 className="text-xl font-bold text-slate-800 mb-2 leading-tight line-clamp-2">{m.title}</h3>
-                                        
-                                        {/* DESCRIPCIÓN */}
                                         <p className="text-slate-500 text-sm mb-6 line-clamp-3 min-h-[3rem]">
-                                            {m.description || "Sin descripción proporcionada."}
+                                            {m.description || "Sin descripción disponible."}
                                         </p>
 
                                         <div className="flex justify-between items-center pt-5 border-t border-slate-50">
                                             <div className="flex flex-col">
-                                                <span className="text-[9px] font-black text-slate-300 uppercase">Subido por</span>
+                                                <span className="text-[9px] font-black text-slate-300 uppercase">Aportado por</span>
                                                 <span className="text-xs font-bold text-slate-400 truncate max-w-[120px]">{m.uploaderName}</span>
                                             </div>
                                             <a href={m.url} target="_blank" className="bg-slate-900 text-white p-3.5 rounded-2xl hover:bg-indigo-600 transition-all shadow-lg active:scale-95">
@@ -248,9 +292,9 @@
                         )}
                     </main>
 
-                    {/* Simulador de Roles */}
+                    {/* Barra de Roles */}
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white px-6 py-3 rounded-full flex items-center gap-4 text-[10px] z-50 shadow-2xl backdrop-blur-md border border-slate-700">
-                        <span className="text-slate-500 font-black uppercase tracking-widest">Simular Rol:</span>
+                        <span className="text-slate-500 font-black uppercase tracking-widest">Rol de Prueba:</span>
                         <div className="flex gap-1">
                             {Object.values(ROLES).map(r => (
                                 <button 
@@ -264,20 +308,22 @@
                         </div>
                     </div>
 
-                    {/* Modal de Carga */}
+                    {/* Modal (Alta y Edición) */}
                     {isOpen && (
                         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
                             <div className="bg-white p-10 rounded-[3rem] w-full max-w-lg shadow-2xl animate-fade-in">
                                 <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-2xl font-black text-slate-800">Publicar Material</h2>
-                                    <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                                    <h2 className="text-2xl font-black text-slate-800">
+                                        {editingItem ? 'Editar Material' : 'Publicar Material'}
+                                    </h2>
+                                    <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 transition-colors">
                                         <i data-lucide="x" className="w-6 h-6"></i>
                                     </button>
                                 </div>
                                 <form onSubmit={handleUpload} className="space-y-5">
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Título del Documento</label>
-                                        <input required className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="Ej: Guía de Cálculo Diferencial" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Título</label>
+                                        <input required className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="Título del archivo" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Carrera</label>
@@ -287,21 +333,23 @@
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Enlace de descarga (Drive, etc.)</label>
-                                        <input required type="url" className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="https://drive.google.com/..." value={form.url} onChange={e => setForm({...form, url: e.target.value})} />
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">URL del Recurso</label>
+                                        <input required type="url" className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="Enlace de Drive o Cloud" value={form.url} onChange={e => setForm({...form, url: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descripción (Opcional)</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descripción</label>
                                         <textarea 
                                             rows="3" 
                                             className="w-full p-4 bg-slate-50 border-none ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none" 
-                                            placeholder="¿De qué trata este material? Temas, unidad, parcial..." 
+                                            placeholder="Breve explicación del contenido..." 
                                             value={form.description} 
                                             onChange={e => setForm({...form, description: e.target.value})}
                                         ></textarea>
                                     </div>
-                                    <button className="w-full py-5 bg-indigo-600 text-white font-black rounded-[1.5rem] shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95">Publicar Ahora</button>
-                                    <button type="button" onClick={() => setIsOpen(false)} className="w-full text-slate-400 font-bold text-sm">Cancelar</button>
+                                    <button className="w-full py-5 bg-indigo-600 text-white font-black rounded-[1.5rem] shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95">
+                                        {editingItem ? 'Guardar Cambios' : 'Publicar Ahora'}
+                                    </button>
+                                    <button type="button" onClick={closeModal} className="w-full text-slate-400 font-bold text-sm">Cancelar</button>
                                 </form>
                             </div>
                         </div>
@@ -313,7 +361,6 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
 
-        // Refresh icons periodically to ensure dynamic content has icons
         setInterval(() => {
             if (window.lucide) lucide.createIcons();
         }, 1000);
